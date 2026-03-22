@@ -1,0 +1,10 @@
+cd /d C:\Users\teach\xdrivee-backend\functions
+(
+echo {
+echo   "apiKey": "PUT_YOUR_API_KEY_HERE",
+echo   "authDomain": "PUT_YOUR_AUTH_DOMAIN_HERE",
+echo   "projectId": "xdrivee-b0622",
+echo   "appId": "PUT_YOUR_APP_ID_HERE"
+echo }
+) > firebase.webconfig.json
+type firebase.webconfig.json

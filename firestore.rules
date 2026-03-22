@@ -1,0 +1,138 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+
+    // admins/{uid} exists
+    // IMPORTANT: admins rule below allows get on own doc so exists() works without recursion.
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(uid()));
+    }
+
+    // driver has an offer under trip (after submitTripBidEU)
+    function hasOffer(tripId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/trips/$(tripId)/offers/$(uid()));
+    }
+
+    // ---------- appConfig (read-only) ----------
+    match /appConfig/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ---------- locationEvents (backend authoritative) ----------
+    match /locationEvents/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ---------- TRIPS (Ride-Share bidding) ----------
+    match /trips/{tripId} {
+      allow get, list: if isAdmin()
+        || (
+          isSignedIn()
+          && (
+            resource.data.userId == uid()
+            || (resource.data.keys().hasAny(['assignedDriverUid']) && resource.data.assignedDriverUid == uid())
+            || hasOffer(tripId)
+          )
+        );
+      allow create, update, delete: if false;
+    }
+
+    // offers subcollection (bids)
+    match /trips/{tripId}/offers/{driverUid} {
+      allow get, list: if isAdmin()
+        || (
+          isSignedIn()
+          && (
+            driverUid == uid()
+            || get(/databases/$(database)/documents/trips/$(tripId)).data.userId == uid()
+            || (
+              get(/databases/$(database)/documents/trips/$(tripId)).data.keys().hasAny(['assignedDriverUid'])
+              && get(/databases/$(database)/documents/trips/$(tripId)).data.assignedDriverUid == uid()
+            )
+          )
+        );
+      allow create, update, delete: if false;
+    }
+
+    // ---------- ORDERS (backend authoritative) ----------
+    match /orders/{orderId} {
+      allow get, list: if isAdmin()
+        || (isSignedIn() && resource.data.userId == uid())
+        || (
+          isSignedIn()
+          && resource.data.keys().hasAny(['shopId'])
+          && exists(/databases/$(database)/documents/shops/$(resource.data.shopId))
+          && get(/databases/$(database)/documents/shops/$(resource.data.shopId)).data.ownerUserId == uid()
+        );
+
+      allow create: if isSignedIn()
+        && request.resource.data.userId == uid()
+        && request.resource.data.status == "pending";
+
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // ---------- DISPUTES ----------
+    match /disputes/{disputeId} {
+      // Admin can read all disputes
+      allow get, list: if isAdmin();
+
+      // Owner can read own dispute
+      allow get: if isSignedIn() && resource.data.openedByUid == uid();
+
+      // Create dispute only by the opener (client)
+      allow create: if isSignedIn()
+        && request.resource.data.openedByUid == uid()
+        && request.resource.data.status == "open";
+
+      // No direct updates/deletes from client
+      allow update, delete: if false;
+
+      // messages subcollection
+      match /messages/{messageId} {
+        // Admin can read all messages
+        allow get, list: if isAdmin();
+
+        // Owner can read own dispute messages
+        allow get, list: if isSignedIn()
+          && get(/databases/$(database)/documents/disputes/$(disputeId)).data.openedByUid == uid();
+
+        // ✅ Admin OR owner can create messages
+        allow create: if isAdmin()
+          || (
+            isSignedIn()
+            && get(/databases/$(database)/documents/disputes/$(disputeId)).data.openedByUid == uid()
+            && request.resource.data.senderUid == uid()
+          );
+
+        // No edits/deletes
+        allow update, delete: if false;
+      }
+    }
+
+    // ---------- SHOPS (read-only for signed-in) ----------
+    match /shops/{shopId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ---------- ADMINS ----------
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && adminUid == uid();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ---------- DEFAULT DENY ----------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

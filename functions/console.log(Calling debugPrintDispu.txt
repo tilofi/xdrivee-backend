@@ -1,0 +1,26 @@
+console.log("Calling debugPrintDisputeCatalogFull...");
+const { httpsCallable } = require("firebase/functions");
+const { initializeApp } = require("firebase/app");
+const { getFunctions } = require("firebase/functions");
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDtsnYJAL4bkMpmhydj8X4nZMeRpqD3fG8",
+  authDomain: "xdrivee-b0622.firebaseapp.com",
+  projectId: "xdrivee-b0622",
+  storageBucket: "xdrivee-b0622.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",  // غيّره لو عندك
+  appId: "YOUR_APP_ID"  // غيّره من Console
+};
+
+const app = initializeApp(firebaseConfig);
+const functions = getFunctions(app);
+
+const call = httpsCallable(functions, 'debugPrintDisputeCatalogFull');
+
+call({})
+  .then(result => {
+    console.log("Success:", JSON.stringify(result.data, null, 2));
+  })
+  .catch(err => {
+    console.error("Error:", err.message);
+  });
